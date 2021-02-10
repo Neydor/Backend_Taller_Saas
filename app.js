@@ -3,10 +3,13 @@
 const mysql = require('mysql');
 const express = require('express');
 const bodyParser = require('body-parser');
+const jwt = require('jsonwebtoken');
 //en caso de desplegarlo
 const PORT = process.env.PORT || 3128;
 const app = express();
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+
 
 
 //--------------- Conexion con la BD -----------------------------------------
@@ -17,67 +20,98 @@ const conexion = mysql.createConnection({
     database: 'bhe1o4gbdndj06xzaufj'
 });
 
-conexion.connect( function (error)  {
+conexion.connect(function(error) {
 
-    if (error) {throw error;}
-    else{console.log('Conexion establecida');}
+    if (error) { throw error; } else { console.log('Conexion establecida'); }
 
 });
 
-
-
-
-
-
-
-
-
-
-
-
+app.post("/login", (req, res) => {
+    const username = req.body.username;
+    const password = req.body.password;
+    const sql = `SELECT * FROM Usuarios WHERE Nombre_Usuario = ${username}`;
+    conexion.query(sql,
+        function(error, results, fields) {
+            if (error)
+                throw error;
+            if (results.length > 0) {
+                if (sql.Contrasenia === password) {
+                    const payload = {
+                        check: true
+                    };
+                    const token = jwt.sign(payload, app.get('llave'), {
+                        expiresIn: 1440
+                    });
+                    res.json({
+                        mensaje: 'Autentificacion correcta',
+                        token: token
+                    });
+                } else {
+                    res.json({ mensaje: "Usuario o contrasena incorrectos." })
+                }
+            } else {
+                res.json({ mensaje: "Usuario o contrasena incorrectos." })
+            }
+        });
+});
 //---------------------------------------------------------   crud ESTACIONES  ___________________________________________________________________________
 
 
-
-
 // traer todas las estaciones
-app.get('/estaciones',(req,res)=> {
-    conexion.query('SELECT * FROM estacion',function(error,results,fields){
+app.get('/estaciones', verifyToken, (req, res) => {
+    jwt.verify(req.token, 'secretkey', (error, authData) => {
+        if (error) {
+            res.sendStatus(403);
+        } else {
+            conexion.query('SELECT * FROM estacion', function(error, results, fields) {
 
-        if (error) 
-        throw error;
-        if (results.length > 0){
-            res.json(results);
+                if (error)
+                    throw error;
+                if (results.length > 0) {
+                    res.json(results);
+                } else {
+                    res.send('No hay registros en la BD');
+                }
+
+            });
         }
-        else {
-            res.send('No hay registros en la BD');
-        }
-    
     });
-
 });
-// traer una estacion segun el id
-app.get('/estaciones/:estacion_id',(req,res)=> {
 
-    const {estacion_id} = req.params
+// Authorization: Bearer <token>
+function verifyToken(req, res, next) {
+    const bearerHeader = req.headers['authorization'];
+
+    if (typeof bearerHeader !== 'undefined') {
+        const bearerToken = bearerHeader.split(" ")[1];
+        req.token = bearerToken;
+        next();
+    } else {
+        res.sendStatus(403);
+    }
+}
+
+// traer una estacion segun el id
+app.get('/estaciones/:estacion_id', (req, res) => {
+
+    const { estacion_id } = req.params;
     const sql = `SELECT * FROM estacion WHERE estacion_id = ${estacion_id}`;
 
-    conexion.query(sql,function(error,results,fields){
+    conexion.query(sql, function(error, results, fields) {
 
-        if (error) 
-        throw error;
-        if (results.length > 0){
+        if (error)
+            throw error;
+        if (results.length > 0) {
             res.json(results);
-        }
-        else {
+        } else {
             res.send('no hay conincidencias');
         }
-    
+
     });
 
 });
 
-app.post('/estaciones',(req,res)=> {
+app.post('/estaciones', (req, res) => {
 
     const sql = 'INSERT INTO estacion SET ?';
     const estacion_obj = {
@@ -89,20 +123,20 @@ app.post('/estaciones',(req,res)=> {
         "estacion_longitud": req.body.estacion_longitud
     };
 
-    conexion.query(sql,estacion_obj,function(error){
+    conexion.query(sql, estacion_obj, function(error) {
 
-    if (error) throw error;
+        if (error) throw error;
         res.send('Estacion Creada');
     });
 
 });
 // Actualizar una estacion segun un Id, Hacer las validaciones por GUI
-app.put('/estaciones/:estacion_id',(req,res)=> {
-   
-        const{estacion_id} = req.params;
-        const{estacion_nombre,estacion_direccion,estacion_telefono,estacion_latitud,estacion_longitud } = req.body;
-  
-        const sql = `UPDATE estacion SET 
+app.put('/estaciones/:estacion_id', (req, res) => {
+
+    const { estacion_id } = req.params;
+    const { estacion_nombre, estacion_direccion, estacion_telefono, estacion_latitud, estacion_longitud } = req.body;
+
+    const sql = `UPDATE estacion SET 
                             estacion_nombre ='${estacion_nombre}', 
                             estacion_direccion='${estacion_direccion}',
                             estacion_telefono='${estacion_telefono}',
@@ -110,25 +144,25 @@ app.put('/estaciones/:estacion_id',(req,res)=> {
                             estacion_longitud=${estacion_longitud}            
                      WHERE estacion_id = '${estacion_id}' `;
 
-    conexion.query(sql,function(error){
+    conexion.query(sql, function(error) {
 
-    if (error) throw error;
+        if (error) throw error;
         res.send('Estacion Actualizada!');
     });
 
 
 });
 
-app.delete('/estaciones/:estacion_id',(req,res)=> {
-   
-    const {estacion_id} = req.params
+app.delete('/estaciones/:estacion_id', (req, res) => {
+
+    const { estacion_id } = req.params
     const sql = `DELETE FROM estacion WHERE estacion_id = ${estacion_id}`;
 
-    conexion.query(sql,function(error,results,fields){
+    conexion.query(sql, function(error, results, fields) {
 
         if (error) throw error;
-            res.send('Estacion Eliminada!');
-        });
+        res.send('Estacion Eliminada!');
+    });
 
 });
 
@@ -150,43 +184,41 @@ app.delete('/estaciones/:estacion_id',(req,res)=> {
 
 
 // traer todos los usuarios
-app.get('/usuarios',(req,res)=> {
-    conexion.query('SELECT * FROM Usuarios',function(error,results,fields){
+app.get('/usuarios', (req, res) => {
+    conexion.query('SELECT * FROM Usuarios', function(error, results, fields) {
 
-        if (error) 
-        throw error;
-        if (results.length > 0){
+        if (error)
+            throw error;
+        if (results.length > 0) {
             res.json(results);
-        }
-        else {
+        } else {
             res.send('No hay registros en la BD de usuario');
         }
-    
+
     });
 
 });
 // traer un usuario segun el id
-app.get('/usuarios/:ID_Usuario',(req,res)=> {
+app.get('/usuarios/:ID_Usuario', (req, res) => {
 
-    const {ID_Usuario} = req.params
+    const { ID_Usuario } = req.params
     const sql = `SELECT * FROM Usuarios WHERE ID_Usuario = ${ID_Usuario}`;
 
-    conexion.query(sql,function(error,results,fields){
+    conexion.query(sql, function(error, results, fields) {
 
-        if (error) 
-        throw error;
-        if (results.length > 0){
+        if (error)
+            throw error;
+        if (results.length > 0) {
             res.json(results);
-        }
-        else {
+        } else {
             res.send('no hay coincidencias');
         }
-    
+
     });
 
 });
 // crear un usuario
-app.post('/usuarios',(req,res,netx)=> {
+app.post('/usuarios', (req, res, netx) => {
 
     const sql = 'INSERT INTO Usuarios SET ?';
     /*let codificado = require('bcrypt-nodejs') 
@@ -213,30 +245,30 @@ app.post('/usuarios',(req,res,netx)=> {
         "Nacionalidad_ID": req.body.Nacionalidad_ID
     };
 
-    conexion.query(sql,estacion_obj,function(error){
+    conexion.query(sql, estacion_obj, function(error) {
 
-    if (error) throw error;
+        if (error) throw error;
         res.send('Usuario Creado');
     });
 
 });
 // Actualizar una estacion segun un Id, Hacer las validaciones por GUI
-app.put('/usuarios/:ID_Usuario',(req,res)=> {
-   
-        const{ID_Usuario} = req.params;
-        const{
-            Nombre_Usuario,
-            Documento,
-            Correo,
-            Contrasenia,
-            Sexo,
-            Telefono,
-            Residencia,
-            Tipo_Documento_ID,
-            Nacionalidad_ID
-        } = req.body;
-        
-        const sql = `UPDATE Usuarios SET 
+app.put('/usuarios/:ID_Usuario', (req, res) => {
+
+    const { ID_Usuario } = req.params;
+    const {
+        Nombre_Usuario,
+        Documento,
+        Correo,
+        Contrasenia,
+        Sexo,
+        Telefono,
+        Residencia,
+        Tipo_Documento_ID,
+        Nacionalidad_ID
+    } = req.body;
+
+    const sql = `UPDATE Usuarios SET 
                              Nombre_Usuario ='${Nombre_Usuario}', 
                              Documento ='${Documento}', 
                              Correo ='${Correo}', 
@@ -248,39 +280,29 @@ app.put('/usuarios/:ID_Usuario',(req,res)=> {
                              Documento=${Nacionalidad_ID}            
                      WHERE ID_Usuario = '${ID_Usuario}' `;
 
-    conexion.query(sql,function(error){
+    conexion.query(sql, function(error) {
 
-    if (error) throw error;
+        if (error) throw error;
         res.send('Usuario Actualizado!');
     });
 
 
 });
 
-app.delete('/usuarios/:ID_Usuario',(req,res)=> {
-   
-    const {ID_Usuario} = req.params
+app.delete('/usuarios/:ID_Usuario', (req, res) => {
+
+    const { ID_Usuario } = req.params
     const sql = `DELETE FROM Usuarios WHERE ID_Usuario = ${ID_Usuario}`;
 
-    conexion.query(sql,function(error,results,fields){
+    conexion.query(sql, function(error, results, fields) {
 
         if (error) throw error;
-            res.send('Usuario Eliminado!');
-        });
+        res.send('Usuario Eliminado!');
+    });
 
 });
 
-
-
-
-
-
-
 //---------------------------------------------------------   FIN ESTACIONES  ___________________________________________________________________________
-
-
-
-
 
 /*
 conexion.query('SELECT * FROM estacion',function(error,results,fields){
@@ -293,5 +315,4 @@ conexion.query('SELECT * FROM estacion',function(error,results,fields){
 
 });
 conexion.end(); */
-app.listen(PORT,()=> console.log('servicio corriendo por el puerto ${PORT}'));
-
+app.listen(PORT, () => console.log('servicio corriendo por el puerto ${PORT}'));
